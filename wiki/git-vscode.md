@@ -38,7 +38,9 @@
 - [Push more commits](#push-more-commits)
   - [Push using the `VS Code Terminal`](#push-using-the-vs-code-terminal)
   - [Push using `GitLens`](#push-using-gitlens)
-- [What is `Git` in `VS Code`](#what-is-git-in-vs-code)
+- [Switch to an existing branch](#switch-to-an-existing-branch)
+  - [Switch to an existing branch using `VS Code Terminal`](#switch-to-an-existing-branch-using-vs-code-terminal)
+  - [Switch to an existing branch using `GitLens`](#switch-to-an-existing-branch-using-gitlens)
 - [Switch to a new branch](#switch-to-a-new-branch)
   - [Switch to a new branch using `GitHub`](#switch-to-a-new-branch-using-github)
   - [Switch to a new branch using the `VS Code Terminal`](#switch-to-a-new-branch-using-the-vs-code-terminal)
@@ -532,6 +534,14 @@ See [Undo commit on the current branch](./gitlens.md#undo-a-commit-on-the-curren
 2. Click `GITLENS`.
 3. Click the `Commits` icon.
 4. Click the `Push` icon to the right of `COMMITS`.
+
+## Switch to an existing branch
+
+<!-- TODO -->
+
+### Switch to an existing branch using `VS Code Terminal`
+
+### Switch to an existing branch using `GitLens`
 
 ## Switch to a new branch
 
