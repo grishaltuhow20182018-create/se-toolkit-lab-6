@@ -256,7 +256,7 @@ The autochecker tests your agent against your **deployed backend on your VM**. Y
 7. Verify the deployment:
 
    ```terminal
-   curl -s http://localhost:42002/items/ -H "Authorization: Bearer <your-LMS_API_KEY>" | head -c 200
+   curl -s http://localhost:42002/items/ -H "Authorization: Bearer <your-LMS_API_KEY>" | jq .
    ```
 
    You should see a JSON array of items.
