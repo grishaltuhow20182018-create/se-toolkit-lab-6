@@ -1,16 +1,17 @@
 # Lab 6 — Build Your Own Agent
 
 The lab gets updated regularly, so do [sync your fork with the upstream](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/syncing-a-fork#syncing-a-fork-branch-from-the-command-line) from time to time.
-
+афвыафыва
 <h2>Table of contents</h2>
 
-- [Lab story](#lab-story)
-- [Learning advice](#learning-advice)
-- [Learning outcomes](#learning-outcomes)
-- [Tasks](#tasks)
-  - [Prerequisites](#prerequisites)
-  - [Required](#required)
-  - [Optional (recommended)](#optional-recommended)
+- [Lab 6 — Build Your Own Agent](#lab-6--build-your-own-agent)
+  - [Lab story](#lab-story)
+  - [Learning advice](#learning-advice)
+  - [Learning outcomes](#learning-outcomes)
+  - [Tasks](#tasks)
+    - [Prerequisites](#prerequisites)
+    - [Required](#required)
+    - [Optional (recommended)](#optional-recommended)
 
 ## Lab story
 
