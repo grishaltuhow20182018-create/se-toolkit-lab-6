@@ -18,19 +18,34 @@ class AgentSettings(BaseSettings):
     llm_api_key: str
     llm_api_base: str
     llm_model: str = "openrouter/hunter-alpha"
+    lms_api_key: str = ""
+    agent_api_base_url: str = "http://localhost:42002"
 
-    model_config = {"env_file": ".env.agent.secret", "env_file_encoding": "utf-8"}
+    model_config = {
+        "env_file": [".env.agent.secret", ".env.docker.secret"],
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
 
-SYSTEM_PROMPT = """You are a documentation assistant. You have access to tools to read files and list directories.
+SYSTEM_PROMPT = """You are a documentation and system assistant. You have access to tools to read files, list directories, and query the backend API.
 
 When asked a question:
-1. Use `list_files` to discover files in the wiki/ directory
-2. Use `read_file` to read relevant wiki files
-3. Find the answer in the documentation
-4. Include the source reference (file path and section anchor if applicable)
+1. For wiki documentation or source code questions:
+   - Use `list_files` to discover files
+   - Use `read_file` to read relevant files
+   - Include the source reference (file path)
 
-Be concise and accurate. Always cite your sources."""
+2. For runtime data or API questions (item count, scores, status codes):
+   - Use `query_api` to query the backend
+   - Use GET for retrieving data
+   - Include specific paths like /items/, /analytics/completion-rate, etc.
+
+3. For bug diagnosis:
+   - First use `query_api` to see the error
+   - Then use `read_file` to find the buggy code
+
+Be concise and accurate. Always cite your sources for documentation questions."""
 
 
 def read_file(path: str) -> str:
@@ -102,6 +117,53 @@ def list_files(path: str) -> str:
     return "\n".join(sorted(entries))
 
 
+def query_api(method: str, path: str, body: str = "") -> str:
+    """Call the backend API.
+
+    Args:
+        method: HTTP method (GET, POST, etc.)
+        path: API path (e.g., /items/, /analytics/completion-rate)
+        body: Optional JSON request body for POST/PUT
+
+    Returns:
+        JSON string with status_code and body, or error message
+    """
+    api_base = os.environ.get("AGENT_API_BASE_URL", "http://localhost:42002")
+    lms_api_key = os.environ.get("LMS_API_KEY", "")
+
+    # Ensure path starts with /
+    if not path.startswith("/"):
+        path = "/" + path
+
+    url = f"{api_base}{path}"
+
+    headers = {
+        "Content-Type": "application/json",
+    }
+
+    if lms_api_key:
+        headers["Authorization"] = f"Bearer {lms_api_key}"
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            if method.upper() == "GET":
+                response = client.get(url, headers=headers)
+            elif method.upper() == "POST":
+                response = client.post(
+                    url, headers=headers, data=body if body else "{}"
+                )
+            else:
+                return f"Error: Unsupported method: {method}"
+
+        result = {
+            "status_code": response.status_code,
+            "body": response.text[:2000],  # Limit response size
+        }
+        return json.dumps(result)
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 # Tool definitions for LLM
 TOOLS = [
     {
@@ -114,7 +176,7 @@ TOOLS = [
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Relative path from project root (e.g., 'wiki/git-workflow.md')",
+                        "description": "Relative path from project root (e.g., 'wiki/git-workflow.md', 'backend/app/main.py')",
                     }
                 },
                 "required": ["path"],
@@ -131,16 +193,41 @@ TOOLS = [
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Relative directory path from project root (e.g., 'wiki')",
+                        "description": "Relative directory path from project root (e.g., 'wiki', 'backend/app/routers')",
                     }
                 },
                 "required": ["path"],
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_api",
+            "description": "Call the backend API to get runtime data. Use this for questions about item counts, scores, status codes, or API behavior. For GET requests, use method='GET'. For POST, include a JSON body.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "method": {
+                        "type": "string",
+                        "description": "HTTP method (GET, POST)",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "API path (e.g., '/items/', '/analytics/completion-rate?lab=lab-06')",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Optional JSON request body for POST requests",
+                    },
+                },
+                "required": ["method", "path"],
+            },
+        },
+    },
 ]
 
-TOOLS_MAP = {"read_file": read_file, "list_files": list_files}
+TOOLS_MAP = {"read_file": read_file, "list_files": list_files, "query_api": query_api}
 
 
 async def call_llm(
@@ -189,8 +276,11 @@ def extract_source_from_messages(messages: list[dict[str, Any]]) -> str:
                 if tc["function"]["name"] == "read_file":
                     args = json.loads(tc["function"]["arguments"])
                     path = args.get("path", "")
-                    if path.startswith("wiki/"):
-                        # Try to extract section from context
+                    if (
+                        path.startswith("wiki/")
+                        or path.endswith(".py")
+                        or path.endswith(".yml")
+                    ):
                         return path
     return ""
 
