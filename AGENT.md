@@ -1,103 +1,158 @@
 # Agent
 
-A CLI agent that connects to an LLM and answers questions. This is the foundation for the agentic system you will build in subsequent tasks.
+A CLI agent that connects to an LLM and answers questions using tools. This is the foundation for the agentic system.
 
 ## Architecture
 
 ```mermaid
 sequenceDiagram
-    box Local machine
-        participant User
-        participant agent.py
-    end
-    box VM
-        participant Proxy as qwen-code-oai-proxy
-    end
-    box Qwen Cloud
-        participant LLM as Qwen 3 Coder
-    end
+    participant User
+    participant agent.py
+    participant LLM
+    participant Tools
 
     User->>agent.py: CLI arg (question)
-    agent.py->>Proxy: POST /v1/chat/completions
-    Proxy->>LLM: proxy request
-    LLM-->>Proxy: response
-    Proxy-->>agent.py: response
-    agent.py-->>User: stdout {answer, tool_calls}
+    agent.py->>LLM: question + tool definitions
+    loop Agentic loop (max 10 tool calls)
+        LLM-->>agent.py: tool_calls
+        agent.py->>Tools: execute tool
+        Tools-->>agent.py: result
+        agent.py->>LLM: tool result
+    end
+    LLM-->>agent.py: text answer (no tool calls)
+    agent.py-->>User: stdout {answer, source, tool_calls}
 ```
 
 ## Components
 
-- **agent.py** - Main CLI entry point
+- **agent.py** - Main CLI entry point with agentic loop
   - Parses command-line arguments
   - Loads environment configuration
-  - Calls the LLM API
+  - Runs the agentic loop
+  - Executes tools (`read_file`, `list_files`)
   - Formats and outputs JSON response
 
 ## LLM Provider
 
-**Provider:** Qwen Code API
+**Provider:** OpenRouter
 
-**Model:** `qwen3-coder-plus`
+**Model:** `openrouter/hunter-alpha`
 
-**Why Qwen Code:**
-- 1000 free requests per day
-- Works from Russia without restrictions
-- No credit card required
+**Why OpenRouter:**
+
+- Free tier available
+- Multiple models to choose from
 - OpenAI-compatible API
-- Strong tool calling capabilities
+- Works without VM setup
 
 ## Configuration
 
 The agent reads configuration from `.env.agent.secret`:
 
 ```bash
-# LLM API key (from Qwen Code API setup)
-LLM_API_KEY=your-api-key-here
+# LLM API key (from OpenRouter)
+LLM_API_KEY=sk-or-...
 
-# API base URL (Qwen Code API on VM)
-LLM_API_BASE=http://<vm-ip>:<port>/v1
+# API base URL
+LLM_API_BASE=https://openrouter.ai/api/v1
 
 # Model name
-LLM_MODEL=qwen3-coder-plus
+LLM_MODEL=openrouter/hunter-alpha
 ```
+
+## Tools
+
+### `read_file`
+
+Read contents of a file from the project repository.
+
+**Parameters:**
+
+- `path` (string) — Relative path from project root (e.g., `wiki/git-workflow.md`)
+
+**Returns:** File contents as string, or error message
+
+**Security:** Blocks path traversal attempts (`../`)
+
+### `list_files`
+
+List files and directories at a given path.
+
+**Parameters:**
+
+- `path` (string) — Relative directory path from project root (e.g., `wiki`)
+
+**Returns:** Newline-separated listing of entries
+
+**Security:** Blocks path traversal attempts (`../`)
 
 ## Usage
 
 ```bash
 # Run with a question
-uv run agent.py "What does REST stand for?"
+uv run agent.py "How do you resolve a merge conflict?"
 ```
 
 **Output:**
 
 ```json
-{"answer": "Representational State Transfer.", "tool_calls": []}
+{
+  "answer": "Edit the conflicting file, choose which changes to keep, then stage and commit.",
+  "source": "wiki/git-workflow.md#resolving-merge-conflicts",
+  "tool_calls": [
+    {"tool": "list_files", "args": {"path": "wiki"}, "result": "git-workflow.md\n..."},
+    {"tool": "read_file", "args": {"path": "wiki/git-workflow.md"}, "result": "..."}
+  ]
+}
 ```
 
 ## Output Format
 
 - `answer` (string) - The LLM's response to the question
-- `tool_calls` (array) - Empty for this task (populated in Task 2)
+- `source` (string) - The wiki section reference (e.g., `wiki/git-workflow.md`)
+- `tool_calls` (array) - All tool calls made during the agentic loop
+
+## Agentic Loop
+
+1. Send user question + tool definitions to LLM
+2. If LLM returns `tool_calls`:
+   - Execute each tool
+   - Append results as `tool` role messages
+   - Send back to LLM
+   - Repeat (max 10 iterations)
+3. If LLM returns text answer (no tool calls):
+   - Extract answer and source
+   - Output JSON and exit
+
+## System Prompt
+
+The system prompt instructs the LLM to:
+
+1. Use `list_files` to discover wiki files in `wiki/` directory
+2. Use `read_file` to read relevant wiki sections
+3. Include source reference (file path + section anchor) in the answer
+4. Be concise and accurate
 
 ## Rules
 
 - Only valid JSON goes to stdout
 - All debug/progress output goes to stderr
 - Response timeout: 60 seconds
+- Maximum 10 tool calls per question
 - Exit code 0 on success
 
 ## Testing
 
-Run the regression test:
+Run the regression tests:
 
 ```bash
-uv run poe test-unit
+uv run pytest test_agent.py -v
 ```
 
 ## Files
 
-- `agent.py` - Main agent implementation
+- `agent.py` - Main agent implementation with agentic loop
 - `.env.agent.secret` - Environment configuration (git-ignored)
 - `AGENT.md` - This documentation
-- `plans/task-1.md` - Implementation plan
-- `backend/tests/unit/test_agent.py` - Regression tests
+- `plans/task-2.md` - Implementation plan
+- `test_agent.py` - Regression tests
