@@ -38,9 +38,10 @@ TOOL USAGE GUIDE:
 - **Source code questions** (e.g., "how does auth work", "show me the router"):
   → Use `read_file` on backend files: `backend/app/main.py`, `backend/app/routers/*.py`
   
-- **Runtime data questions** (e.g., "how many items", "what is the pass rate", "show me scores"):
+- **Runtime data questions** (e.g., "how many items", "what is the pass rate", "status codes"):
   → Use `query_api` with GET method
   → Common endpoints: `/items/`, `/analytics/completion-rate`, `/analytics/groups`, `/analytics/timeline`
+  → **IMPORTANT:** Always check the actual `status_code` in the API response before answering!
 
 - **SSH/VM questions**:
   → Read `wiki/setup.md` or `wiki/ssh.md` for SSH instructions
@@ -48,14 +49,16 @@ TOOL USAGE GUIDE:
 RULES:
 1. Be direct - call the right tool immediately, don't waste iterations
 2. For wiki questions, read the file directly (e.g., `wiki/git-workflow.md`)
-3. Keep answers concise but complete
-4. Always include the source file path in your answer
-5. Maximum 5 tool calls - prioritize the most relevant files first
+3. **For API questions, ALWAYS check the response status_code and body** - don't assume!
+4. Keep answers concise but complete
+5. Always include the source file path in your answer
+6. Maximum 5 tool calls - prioritize the most relevant files first
 
 EXAMPLES:
 - "How to protect a branch?" → read_file("wiki/git-workflow.md")
 - "SSH to VM?" → read_file("wiki/setup.md") or read_file("wiki/ssh.md")
-- "How many items?" → query_api(method="GET", path="/items/")
+- "How many items?" → query_api(method="GET", path="/items/") → check response.body
+- "What status code?" → query_api(method="GET", path="/items/") → check response.status_code
 """
 
 
