@@ -2,13 +2,12 @@
 
 import json
 import subprocess
-import sys
 
 
 def test_agent_returns_valid_json_with_answer_and_tool_calls() -> None:
     """Test that agent.py returns valid JSON with required fields."""
     result = subprocess.run(
-        [sys.executable, "-m", "uv", "run", "agent.py", "What is 2+2?"],
+        ["uv", "run", "python", "agent.py", "What is 2+2?"],
         capture_output=True,
         text=True,
         timeout=60,

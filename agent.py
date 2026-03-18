@@ -28,24 +28,35 @@ class AgentSettings(BaseSettings):
     }
 
 
-SYSTEM_PROMPT = """You are a documentation and system assistant. You have access to tools to read files, list directories, and query the backend API.
+SYSTEM_PROMPT = """You are a documentation and system assistant. Answer questions using the available tools.
 
-When asked a question:
-1. For wiki documentation or source code questions:
-   - Use `list_files` to discover files
-   - Use `read_file` to read relevant files
-   - Include the source reference (file path)
+TOOL USAGE GUIDE:
+- **Wiki/Documentation questions** (e.g., "how to protect a branch", "SSH setup"): 
+  → Use `read_file` directly on wiki files: `wiki/git-workflow.md`, `wiki/setup.md`, `wiki/ssh.md`
+  → DO NOT use `list_files` - go directly to the relevant wiki file
+  
+- **Source code questions** (e.g., "how does auth work", "show me the router"):
+  → Use `read_file` on backend files: `backend/app/main.py`, `backend/app/routers/*.py`
+  
+- **Runtime data questions** (e.g., "how many items", "what is the pass rate", "show me scores"):
+  → Use `query_api` with GET method
+  → Common endpoints: `/items/`, `/analytics/completion-rate`, `/analytics/groups`, `/analytics/timeline`
 
-2. For runtime data or API questions (item count, scores, status codes):
-   - Use `query_api` to query the backend
-   - Use GET for retrieving data
-   - Include specific paths like /items/, /analytics/completion-rate, etc.
+- **SSH/VM questions**:
+  → Read `wiki/setup.md` or `wiki/ssh.md` for SSH instructions
 
-3. For bug diagnosis:
-   - First use `query_api` to see the error
-   - Then use `read_file` to find the buggy code
+RULES:
+1. Be direct - call the right tool immediately, don't waste iterations
+2. For wiki questions, read the file directly (e.g., `wiki/git-workflow.md`)
+3. Keep answers concise but complete
+4. Always include the source file path in your answer
+5. Maximum 5 tool calls - prioritize the most relevant files first
 
-Be concise and accurate. Always cite your sources for documentation questions."""
+EXAMPLES:
+- "How to protect a branch?" → read_file("wiki/git-workflow.md")
+- "SSH to VM?" → read_file("wiki/setup.md") or read_file("wiki/ssh.md")
+- "How many items?" → query_api(method="GET", path="/items/")
+"""
 
 
 def read_file(path: str) -> str:
@@ -170,7 +181,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Read contents of a file from the project repository. Use this to read wiki files or source code.",
+            "description": "Read contents of a file from the project repository. Use this for wiki documentation (wiki/*.md), source code (*.py), or config files (*.yml, *.json). For SSH questions, read wiki/setup.md. For git questions, read wiki/git-workflow.md.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -229,6 +240,9 @@ TOOLS = [
 
 TOOLS_MAP = {"read_file": read_file, "list_files": list_files, "query_api": query_api}
 
+# Cache for tool results to avoid redundant calls
+_tool_cache: dict[str, str] = {}
+
 
 async def call_llm(
     messages: list[dict[str, Any]], settings: AgentSettings
@@ -261,9 +275,21 @@ def execute_tool(tool_name: str, args: dict[str, Any]) -> str:
     if tool_name not in TOOLS_MAP:
         return f"Error: Unknown tool: {tool_name}"
 
+    # Create cache key
+    cache_key = f"{tool_name}:{json.dumps(args, sort_keys=True)}"
+
+    # Check cache
+    if cache_key in _tool_cache:
+        return _tool_cache[cache_key]
+
     try:
         tool_func = TOOLS_MAP[tool_name]
-        return tool_func(**args)
+        result = tool_func(**args)
+
+        # Cache the result
+        _tool_cache[cache_key] = result
+
+        return result
     except Exception as e:
         return f"Error executing tool: {e}"
 
@@ -294,9 +320,9 @@ async def run_agent(question: str, settings: AgentSettings) -> dict[str, Any]:
     ]
 
     all_tool_calls = []
-    max_iterations = 10
+    max_iterations = 5  # Limit to avoid timeout
 
-    for _ in range(max_iterations):
+    for i in range(max_iterations):
         # Call LLM
         response = await call_llm(messages, settings)
 
@@ -314,8 +340,8 @@ async def run_agent(question: str, settings: AgentSettings) -> dict[str, Any]:
 
             return {"answer": answer, "source": source, "tool_calls": all_tool_calls}
 
-        # Execute tools
-        for tc in tool_calls:
+        # Execute tools (only first 2 per iteration to stay under timeout)
+        for tc in tool_calls[:2]:
             tool_name = tc["function"]["name"]
             args = json.loads(tc["function"]["arguments"])
 
